@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telemetry Compare</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  --bg: #14171c;
+  --panel: #1c2027;
+  --panel-2: #232833;
+  --border: #323a48;
+  --fg: #d7dce4;
+  --fg-dim: #8a93a3;
+  --a: #4ea1ff;
+  --b: #ff9f43;
+  --c: #5be08a;
+  --grid: #2a3140;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 13px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+  display: flex; flex-direction: column;
+}
+header {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+}
+header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+header .sub { color: var(--fg-dim); font-size: 12px; }
+
+#layout { flex: 1; display: flex; min-height: 0; }
+#sidebar {
+  width: 350px; min-width: 300px; border-right: 1px solid var(--border);
+  background: var(--panel); display: flex; flex-direction: column; overflow-y: auto;
+}
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 12px 14px; gap: 10px; }
+
+.section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.section h2 {
+  margin: 0 0 8px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--fg-dim); font-weight: 600;
+}
+.filebox { margin-bottom: 10px; }
+.filebox label.tag { display: inline-block; font-weight: 700; font-size: 11px; margin-bottom: 4px; }
+.tag.A { color: var(--a); } .tag.B { color: var(--b); } .tag.C { color: var(--c); }
+.filebox input[type=file] { width: 100%; color: var(--fg-dim); font-size: 12px; }
+.filebox input.fname { width: 100%; margin-top: 4px; }
+.filebox .meta { margin-top: 4px; color: var(--fg-dim); font-size: 12px; min-height: 16px; white-space: pre-line; }
+.filebox .meta.err { color: #ff6b6b; }
+
+.rowline { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+select, button, input[type=text] {
+  background: var(--panel-2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 5px; padding: 4px 8px; font-size: 12px;
+}
+input[type=text] { width: 100%; }
+button { cursor: pointer; }
+button:hover { border-color: var(--a); }
+label.opt { color: var(--fg-dim); display: flex; align-items: center; gap: 5px; cursor: pointer; }
+input[type=checkbox] { accent-color: var(--a); }
+
+#collist { display: flex; flex-direction: column; max-height: 40vh; overflow-y: auto; }
+#colrows { display: flex; flex-direction: column; gap: 2px; }
+.colhdrs { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.colrow { display: grid; grid-template-columns: 1fr 20px 20px 20px; align-items: center; padding: 3px 6px; border-radius: 4px; gap: 4px; }
+.colrow .cbA, .colrow .cbB, .colrow .cbC { display: flex; justify-content: center; }
+.colrow:hover { background: var(--panel-2); }
+.colrow .cname { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.colrow input { margin: 0 auto; }
+.colrow .cbA input { accent-color: var(--a); }
+.colrow .cbB input { accent-color: var(--b); }
+.colrow .cbC input { accent-color: var(--c); }
+.colhdrs { display: grid; grid-template-columns: 1fr 20px 20px 20px; padding: 2px 6px; font-size: 10px;
+  text-transform: uppercase; color: var(--fg-dim); gap: 4px; letter-spacing: .05em; }
+.colhdrs .a, .colhdrs .b, .colhdrs .c { text-align: center; }
+.colhdrs .a { color: var(--a); } .colhdrs .b { color: var(--b); } .colhdrs .c { color: var(--c); }
+
+#chartwrap {
+  flex: 1; position: relative; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; min-height: 260px; overflow: hidden;
+}
+#chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+#empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--fg-dim); font-size: 13px; pointer-events: none; text-align: center; padding: 20px;
+}
+#legend { display: flex; flex-wrap: wrap; gap: 8px 28px; min-height: 18px; }
+#legend .lgroup { display: flex; flex-direction: column; gap: 3px; }
+#legend .lgtitle { font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+#legend .lgitems { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+#legend .item { display: flex; align-items: center; gap: 6px; }
+#legend .swatch { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
+#statusbar { display: flex; gap: 16px; color: var(--fg-dim); font-size: 12px; align-items: center; }
+#tooltip {
+  position: absolute; pointer-events: none; background: #0e1116ee; border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 9px; font-size: 12px; display: none; z-index: 5;
+  max-width: 340px; box-shadow: 0 4px 14px #0008;
+}
+#tooltip .tt-x { color: var(--fg-dim); margin-bottom: 3px; }
+#tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Telemetry Compare</h1>
+  <span class="sub">up to 3 logger CSVs (HWiNFO64 / nvidia-smi / any logger), pick columns, compare runs</span>
+</header>
+
+<div id="layout">
+  <div id="sidebar">
+    <div class="section">
+      <h2>Data sources</h2>
+      <div class="filebox">
+        <label class="tag A">File A</label>
+        <input type="file" id="fileA" accept=".csv,.txt,text/csv">
+        <input type="text" class="fname" id="fnameA" placeholder="Friendly name for A (shown over chart)">
+        <div class="meta" id="metaA">no file loaded</div>
+      </div>
+      <div class="filebox">
+        <label class="tag B">File B</label>
+        <input type="file" id="fileB" accept=".csv,.txt,text/csv">
+        <input type="text" class="fname" id="fnameB" placeholder="Friendly name for B (shown over chart)">
+        <div class="meta" id="metaB">no file loaded</div>
+      </div>
+      <div class="filebox">
+        <label class="tag C">File C</label>
+        <input type="file" id="fileC" accept=".csv,.txt,text/csv">
+        <input type="text" class="fname" id="fnameC" placeholder="Friendly name for C (shown over chart)">
+        <div class="meta" id="metaC">no file loaded</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>X axis</h2>
+      <div class="rowline">
+        <select id="xcol"><option value="">(row index)</option></select>
+      </div>
+      <div class="rowline" id="alignrow">
+        <label class="opt"><input type="radio" name="align" value="relative" checked> align starts (elapsed)</label>
+        <label class="opt"><input type="radio" name="align" value="absolute"> absolute time</label>
+      </div>
+    </div>
+
+    <div class="section" style="flex:1">
+      <h2>Columns &nbsp;<button id="clearsel" style="padding:1px 8px;font-size:11px">clear</button></h2>
+      <div class="rowline"><input type="text" id="colfilter" placeholder="filter columns... (e.g. gpu, temp, clock)"></div>
+      <div id="collist">
+        <div class="colhdrs"><span></span><span class="a">A</span><span class="b">B</span><span class="c">C</span></div>
+        <div id="colrows"><span class="nonnum">load a file to see columns</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="rowline">
+        <label class="opt"><input type="checkbox" id="normalize"> normalize each series (min-max)</label>
+      </div>
+      <div class="rowline">
+        <label class="opt"><input type="checkbox" id="dots"> show points</label>
+        <label class="opt"><input type="checkbox" id="markersonly" checked> smart decimate</label>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="legend"></div>
+    <div id="chartwrap">
+      <canvas id="chart"></canvas>
+      <div id="empty">Select one to three CSV files on the left,<br>then tick columns (A/B/C) to plot.</div>
+      <div id="tooltip"></div>
+    </div>
+    <div id="statusbar">
+      <span id="stat-left">ready</span>
+      <button id="resetzoom" style="display:none">reset zoom</button>
+      <button id="exportbtn">Export Chart</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============ core parsing (DOM-free, unit-testable in node) ============ */
+
+// RFC4180-ish CSV splitter: quotes, doubled quotes, CRLF, embedded newlines.
+function splitCsv(text) {
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); if (row.length > 1 || row[0] !== '') rows.push(row); }
+  return rows;
+}
+
+// HWiNFO report files repeat the header row near the end of the file, followed by
+// "System: ..." metadata rows. Cut the table at the repeated header.
+function stripRepeatedHeader(rows) {
+  if (rows.length < 2) return rows;
+  const h = rows[0];
+  if (h.length < 3) return rows;
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.length > h.length * 0.5 && r[0] === h[0] && r[1] === h[1] && r[2] === h[2]) return rows.slice(0, i);
+  }
+  return rows;
+}
+
+// Numeric value parser tolerant of units: "45.2 %", "1,234", "3050.0" -> number; "N/A" -> NaN.
+function toNum(s) {
+  if (s == null) return NaN;
+  s = String(s).trim();
+  if (s === '' || /^(na|n\/a|nan|null|-+)$/i.test(s)) return NaN;
+  s = s.replace(/,/g, '');
+  const m = s.match(/-?\d+(\.\d+)?([eE][+-]?\d+)?/);
+  if (!m) return NaN;
+  const v = parseFloat(m[0]);
+  return Number.isFinite(v) ? v : NaN;
+}
+
+// Timestamp parser -> epoch seconds. Handles: epoch s/ms, "YYYY-MM-DD HH:MM:SS(.mmm)",
+// and European "DD.MM.YYYY H:MM:SS.mmm" (HWiNFO). NaN otherwise.
+function parseTimeSec(s) {
+  if (s == null) return NaN;
+  s = String(s).trim();
+  if (s === '') return NaN;
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const v = parseFloat(s);
+    if (v > 1e11) return v / 1000;   // ms epoch
+    if (v > 1e8) return v;           // s epoch
+    return NaN;                       // plain counter, not epoch
+  }
+  let m = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})(?:[ ,]+(\d{1,2}):(\d{1,2}):(\d{1,2})(\.\d+)?)?$/);
+  if (m) {  // day-first date, . or / separator; HWiNFO may leave min/sec unpadded ("7:35:0.689")
+    const ms = m[7] ? Math.round(parseFloat(m[7]) * 1000) : 0;
+    return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0), ms).getTime() / 1000;
+  }
+  m = s.match(/^\d{4}-\d{2}-\d{2}([T ]\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/);
+  if (m) {
+    const t = Date.parse(s.includes(' ') ? s.replace(' ', 'T') : s);
+    return Number.isNaN(t) ? NaN : t / 1000;
+  }
+  const t2 = Date.parse(s);
+  return Number.isNaN(t2) ? NaN : t2 / 1000;
+}
+
+function looksIncreasing(col) {
+  let inc = 0, tot = 0;
+  const step = Math.max(1, Math.floor(col.length / 50));
+  for (let i = step; i < col.length; i += step) { tot++; if (col[i] > col[i - step]) inc++; }
+  return tot > 0 && inc / tot >= 0.95;
+}
+
+// rows -> { headers, num:{col:Float64Array}, text:{col:array}, isTime:{col:bool}, n }
+// Special case: adjacent "Date" + "Time" columns (HWiNFO) merge into a virtual "Date Time" column.
+function buildTable(rows) {
+  if (!rows.length) return null;
+  rows = stripRepeatedHeader(rows);
+  if (rows.length < 2) return null;
+
+  const h0 = rows[0].map(x => x.trim());
+  let di = -1, ti = -1;
+  for (let i = 0; i < Math.min(h0.length, 4); i++) {
+    if (/^date$/i.test(h0[i])) di = i;
+    if (/^time$/i.test(h0[i])) ti = i;
+  }
+  if (di === 0 && ti === 1) {
+    rows = rows.map((r, ri) => {
+      if (ri === 0) return ['Date Time', ...r.slice(2)];
+      return [(((r[0] || '') + ' ' + (r[1] || '')).trim()), ...r.slice(2)];
+    });
+  }
+
+  const headers = rows[0].map((h, i) => (h.trim() || `col${i + 1}`));
+  const n = rows.length - 1;
+  const data = rows.slice(1);
+  const seen = {};
+  headers.forEach((h, i) => { if (seen[h] != null) { seen[h]++; headers[i] = `${h}_${seen[h]}`; } else seen[h] = 1; });
+
+  const num = {}, text = {}, isTime = {};
+  for (let c = 0; c < headers.length; c++) {
+    const col = new Float64Array(n);
+    const raw = new Array(n);
+    let numericCount = 0, timeCount = 0, nonEmpty = 0;
+    const timeHint = /^(date time|timestamp|datetime)$/i.test(headers[c]);
+    for (let r = 0; r < n; r++) {
+      const v = data[r][c] !== undefined ? String(data[r][c]) : '';
+      raw[r] = v;
+      if (v !== '') {
+        nonEmpty++;
+        const x = toNum(v);
+        col[r] = x;
+        if (!Number.isNaN(x)) numericCount++;
+        if (!Number.isNaN(parseTimeSec(v))) timeCount++;
+      } else col[r] = NaN;
+    }
+    const frac = nonEmpty ? numericCount / nonEmpty : 0;
+    const tfrac = nonEmpty ? timeCount / nonEmpty : 0;
+    if (timeHint && tfrac >= 0.9) {
+      const tc = new Float64Array(n);
+      for (let r = 0; r < n; r++) tc[r] = parseTimeSec(raw[r]);
+      num[headers[c]] = tc;
+      isTime[headers[c]] = looksIncreasing(tc);
+    } else if (frac >= 0.8) {
+      num[headers[c]] = col;
+      isTime[headers[c]] = false;
+    } else {
+      text[headers[c]] = raw;
+      isTime[headers[c]] = false;
+    }
+  }
+  return { headers, num, text, isTime, n };
+}
+
+// Decode bytes: UTF-16LE/BE BOM, UTF-8 BOM, else windows-1252 (HWiNFO ANSI output).
+function decodeBytes(buf) {
+  const u8 = new Uint8Array(buf);
+  if (u8[0] === 0xFF && u8[1] === 0xFE) return new TextDecoder('utf-16le').decode(u8.subarray(2));
+  if (u8[0] === 0xFE && u8[1] === 0xFF) return new TextDecoder('utf-16be').decode(u8.subarray(2));
+  if (u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) return new TextDecoder('utf-8').decode(u8.subarray(3));
+  try { return new TextDecoder('windows-1252', { fatal: true }).decode(u8); }
+  catch { return new TextDecoder('utf-8').decode(u8); }
+}
+
+// LTTB downsample preserving NaN gaps as line breaks.
+function downsample(x, y, threshold) {
+  const n = x.length;
+  if (n <= threshold || threshold < 10) return { x, y };
+  const ox = [], oy = [];
+  let start = 0;
+  const flush = (s, e) => {
+    if (e - s <= threshold) { for (let i = s; i < e; i++) { ox.push(x[i]); oy.push(y[i]); } return; }
+    const seg = lttb(x.subarray(s, e), y.subarray(s, e), threshold);
+    for (let i = 0; i < seg.x.length; i++) { ox.push(seg.x[i]); oy.push(seg.y[i]); }
+  };
+  for (let i = 0; i < n; i++) {
+    if (Number.isNaN(y[i])) { if (i > start) flush(start, i); start = i + 1; ox.push(NaN); oy.push(NaN); }
+  }
+  if (n > start) flush(start, n);
+  return { x: Float64Array.from(ox), y: Float64Array.from(oy) };
+}
+
+function lttb(x, y, threshold) {
+  const n = x.length;
+  const ox = new Float64Array(threshold), oy = new Float64Array(threshold);
+  let oi = 0;
+  ox[oi] = x[0]; oy[oi] = y[0]; oi++;
+  const bucket = (n - 2) / (threshold - 2);
+  let a = 0;
+  for (let i = 1; i < threshold - 1; i++) {
+    const nextStart = Math.floor((i + 1) * bucket) + 1;
+    let avgX = 0, avgY = 0, cnt = 0;
+    for (let j = nextStart; j < Math.min(Math.floor((i + 2) * bucket) + 1, n); j++) { avgX += x[j]; avgY += y[j]; cnt++; }
+    if (cnt) { avgX /= cnt; avgY /= cnt; }
+    const rs = Math.floor(i * bucket) + 1, re = Math.floor((i + 1) * bucket) + 1;
+    let best = rs, bestA = -1;
+    const ax = x[a], ay = y[a];
+    for (let j = rs; j < Math.min(re, n); j++) {
+      const area = Math.abs((ax - avgX) * (y[j] - ay) - (ax - x[j]) * (avgY - ay));
+      if (area > bestA) { bestA = area; best = j; }
+    }
+    ox[oi] = x[best]; oy[oi] = y[best]; oi++;
+    a = best;
+  }
+  ox[oi] = x[n - 1]; oy[oi] = y[n - 1];
+  return { x: ox.slice(0, oi + 1), y: oy.slice(0, oi + 1) };
+}
+
+// export for node unit tests; browser ignores this
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { splitCsv, stripRepeatedHeader, toNum, parseTimeSec, buildTable, downsample, lttb, decodeBytes };
+}
+
+/* ============ UI layer ============ */
+if (typeof document !== 'undefined' && document.getElementById('chart')) (function () {
+  const SLOTS = ['A', 'B', 'C'];
+  const $ = (id) => document.getElementById(id);
+  const files = { A: null, B: null, C: null };  // {name, table}
+  const selection = new Map();                  // col -> {A,B,C}
+  let viewX = null, dragStart = null, seriesCache = [];
+
+  const canvas = $('chart'), ctx = canvas.getContext('2d');
+  const tooltip = $('tooltip');
+  const css = getComputedStyle(document.documentElement);
+
+  for (const s of SLOTS) {
+    $('file' + s).addEventListener('change', (e) => loadFile(s, e.target.files[0]));
+    $('fname' + s).addEventListener('input', draw);
+  }
+  $('xcol').addEventListener('change', draw);
+  $('normalize').addEventListener('change', draw);
+  $('dots').addEventListener('change', draw);
+  $('markersonly').addEventListener('change', draw);
+  $('colfilter').addEventListener('input', renderColumnList);
+  $('clearsel').addEventListener('click', () => { selection.clear(); renderColumnList(); draw(); });
+  $('resetzoom').addEventListener('click', () => { viewX = null; $('resetzoom').style.display = 'none'; draw(); });
+  document.querySelectorAll('input[name=align]').forEach(r => r.addEventListener('change', draw));
+
+  function loadFile(slot, file) {
+    const meta = $('meta' + slot);
+    if (!file) return;
+    meta.className = 'meta';
+    meta.textContent = 'parsing...';
+    const reader = new FileReader();
+    reader.onerror = () => { meta.className = 'meta err'; meta.textContent = 'read error'; };
+    reader.onload = () => {
+      try {
+        const t0 = performance.now();
+        const table = buildTable(splitCsv(decodeBytes(reader.result)));
+        if (!table || !table.n) throw new Error('no data rows');
+        files[slot] = { name: file.name, table };
+        const dt = estimateInterval(table);
+        meta.textContent =
+          `${file.name}\n${table.n.toLocaleString()} rows, ${table.headers.length} cols, ` +
+          `${(file.size / 1048576).toFixed(2)} MB, ${(performance.now() - t0).toFixed(0)} ms` +
+          (dt ? `\n~${dt.toFixed(2)} s sample interval` : '');
+        rebuildColumnControls();
+        draw();
+      } catch (err) {
+        meta.className = 'meta err';
+        meta.textContent = 'parse error: ' + err.message;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function estimateInterval(table) {
+    for (const h of table.headers) {
+      if (table.isTime[h]) {
+        const c = table.num[h], diffs = [];
+        for (let i = 1; i < Math.min(c.length, 500); i++) { const d = c[i] - c[i - 1]; if (d > 0) diffs.push(d); }
+        if (diffs.length) { diffs.sort((a, b) => a - b); return diffs[diffs.length >> 1]; }
+      }
+    }
+    return 0;
+  }
+
+  function unionHeaders() {
+    const out = [], seen = new Set();
+    for (const s of SLOTS) {
+      const t = files[s] && files[s].table;
+      if (t) for (const h of t.headers) if (!seen.has(h)) { seen.add(h); out.push(h); }
+    }
+    return out;
+  }
+
+  function rebuildColumnControls() {
+    const hdrs = unionHeaders();
+    for (const k of [...selection.keys()]) if (!hdrs.includes(k)) selection.delete(k);
+    const xc = $('xcol'), prev = xc.value;
+    xc.innerHTML = '<option value="">(row index)</option>';
+    for (const h of hdrs) {
+      const isT = SLOTS.some(s => files[s] && files[s].table.isTime[h]);
+      if (isT) { const o = document.createElement('option'); o.value = h; o.textContent = h + ' (time)'; xc.appendChild(o); }
+    }
+    if (!prev && xc.options.length > 1) xc.selectedIndex = 1;  // auto-pick first time column
+    else if ([...xc.options].some(o => o.value === prev)) xc.value = prev;
+    renderColumnList();
+  }
+
+  function renderColumnList() {
+    const list = $('colrows');
+    const filt = $('colfilter').value.trim().toLowerCase();
+    list.innerHTML = '';
+    let hdrs = unionHeaders();
+    if (filt) hdrs = hdrs.filter(h => h.toLowerCase().includes(filt));
+    if (!hdrs.length) {
+      list.innerHTML = '<span class="nonnum">' + (filt ? 'no matching columns' : 'load a file to see columns') + '</span>';
+      return;
+    }
+    if (hdrs.length > 800) hdrs = hdrs.slice(0, 800);
+    for (const h of hdrs) {
+      const sel = selection.get(h) || { A: false, B: false, C: false };
+      const row = document.createElement('div');
+      row.className = 'colrow';
+      const name = document.createElement('span');
+      name.className = 'cname';
+      name.textContent = h;
+      const loaded = SLOTS.filter(s => files[s]);
+      const avail = loaded.filter(s => files[s].table.num[h]);
+      name.title = h + (avail.length < loaded.length ? `\nnumeric only in: ${avail.join(', ')}` : '');
+      row.appendChild(name);
+      for (const slot of SLOTS) {
+        const w = document.createElement('span');
+        w.className = 'cb' + slot;
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.disabled = !(files[slot] && files[slot].table.num[h]);
+        cb.checked = sel[slot];
+        cb.addEventListener('change', () => {
+          const cur = selection.get(h) || { A: false, B: false, C: false };
+          cur[slot] = cb.checked;
+          selection.set(h, cur);
+          viewX = null; $('resetzoom').style.display = 'none';
+          draw();
+        });
+        w.appendChild(cb);
+        row.appendChild(w);
+      }
+      list.appendChild(row);
+    }
+  }
+
+  // display label for a slot: friendly name if set, else "A/B/C"
+  function slotName(slot) {
+    const el = $('fname' + slot);
+    const fn = el ? el.value.trim() : '';
+    return fn || slot;
+  }
+  // short tag for tooltips: friendly name (truncated) or slot letter
+  function slotTag(slot) {
+    const n = slotName(slot);
+    return n.length > 24 ? n.slice(0, 23) + '…' : n;
+  }
+
+  function seriesColor(colorIdx, slot) {
+    const hues = [205, 28, 145, 330, 90, 260, 15, 185, 55];
+    const h = hues[colorIdx % hues.length];
+    const l = slot === 'A' ? 62 : slot === 'B' ? 58 : 55;
+    const s = slot === 'A' ? 90 : 95;
+    return `hsl(${h} ${s}% ${l}%)`;
+  }
+  function slotDash(slot) { return slot === 'A' ? [] : slot === 'B' ? [6, 4] : [2, 3]; }
+
+  function getX(table) {
+    const xh = $('xcol').value;
+    const n = table.n;
+    if (xh && table.num[xh] && table.isTime[xh]) {
+      const mode = document.querySelector('input[name=align]:checked').value;
+      const c = table.num[xh];
+      if (mode === 'relative') {
+        const x = new Float64Array(n);
+        const t0 = c[0];
+        for (let i = 0; i < n; i++) x[i] = c[i] - t0;
+        return { x, isTime: true };
+      }
+      return { x: c, isTime: true };
+    }
+    if (xh && table.num[xh]) return { x: table.num[xh], isTime: false };
+    const x = new Float64Array(n);
+    for (let i = 0; i < n; i++) x[i] = i;
+    return { x, isTime: false };
+  }
+
+  function computeSeries() {
+    const out = [];
+    let idx = 0;
+    for (const [h, sel] of selection) {
+      for (const slot of SLOTS) {
+        if (!sel[slot]) continue;
+        const f = files[slot];
+        if (!f || !f.table.num[h]) continue;
+        out.push({ col: h, slot, y: f.table.num[h], xref: getX(f.table), colorIdx: idx });
+      }
+      idx++;
+    }
+    return out;
+  }
+
+  function fmtX(v, isTime) {
+    if (isTime) {
+      const neg = v < 0 ? '-' : '';
+      v = Math.abs(v);
+      if (v >= 86400) return neg + (v / 86400).toFixed(1) + 'd';
+      if (v >= 3600) return neg + Math.floor(v / 3600) + 'h' + String(Math.round(v % 3600 / 60)).padStart(2, '0');
+      if (v >= 60) return neg + Math.floor(v / 60) + 'm' + String(Math.round(v % 60)).padStart(2, '0');
+      return neg + v.toFixed(1) + 's';
+    }
+    if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+    if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + 'k';
+    return String(+v.toFixed(2));
+  }
+
+  function fmtY(v) {
+    if (!Number.isFinite(v)) return '';
+    const a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(2) + 'G';
+    if (a >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+    if (a >= 1000) return (v / 1000).toFixed(1) + 'k';
+    if (a >= 10) return v.toFixed(1);
+    return v.toPrecision(3).replace(/\.?0+$/, '') || '0';
+  }
+
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    if (!W || !H) return;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const series = computeSeries();
+    seriesCache = series;
+    $('empty').style.display = series.length ? 'none' : 'flex';
+    renderLegend(series);
+    if (!series.length) { $('stat-left').textContent = 'ready'; return; }
+
+    const norm = $('normalize').checked;
+    const pad = { l: 64, r: 14, t: 10, b: 26 };
+
+    let x0 = Infinity, x1 = -Infinity;
+    for (const s of series) {
+      const x = s.xref.x;
+      for (let i = 0; i < x.length; i++) if (!Number.isNaN(x[i])) { if (x[i] < x0) x0 = x[i]; if (x[i] > x1) x1 = x[i]; }
+    }
+    if (!(x1 > x0)) { x0 = 0; x1 = 1; }
+    if (viewX) { x0 = viewX[0]; x1 = viewX[1]; }
+
+    let y0 = Infinity, y1 = -Infinity;
+    for (const s of series) {
+      const y = s.y;
+      let mn = Infinity, mx = -Infinity;
+      for (let i = 0; i < y.length; i++) { if (y[i] < mn) mn = y[i]; if (y[i] > mx) mx = y[i]; }
+      if (mn === Infinity) continue;
+      s.mn = mn; s.mx = mx;
+      if (!norm) { if (mn < y0) y0 = mn; if (mx > y1) y1 = mx; }
+    }
+    if (norm) { y0 = 0; y1 = 1; }
+    // y-axis baseline: always include 0 unless data goes negative (e.g. delta series)
+    if (y0 > 0) y0 = 0;
+    if (!(y1 > y0)) { y1 = y0 + 1; }
+    const ypadv = (y1 - y0) * 0.06;
+    y1 += ypadv;
+    if (y0 < 0) y0 -= ypadv;
+
+    const X = (v) => pad.l + (v - x0) / (x1 - x0) * (W - pad.l - pad.r);
+    const Y = (v) => H - pad.b - (v - y0) / (y1 - y0) * (H - pad.t - pad.b);
+
+    ctx.strokeStyle = css.getPropertyValue('--grid').trim();
+    ctx.fillStyle = css.getPropertyValue('--fg-dim').trim();
+    ctx.lineWidth = 1;
+    ctx.font = '11px system-ui, sans-serif';
+    for (const t of niceTicks(y0, y1, 6)) {
+      const py = Math.round(Y(t)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(pad.l, py); ctx.lineTo(W - pad.r, py); ctx.stroke();
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(norm ? t.toFixed(1) : fmtY(t), pad.l - 6, py);
+    }
+    const isTimeAxis = series.some(s => s.xref.isTime);
+    for (const t of niceTicks(x0, x1, Math.max(4, Math.floor(W / 110)))) {
+      const px = Math.round(X(t)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(px, pad.t); ctx.lineTo(px, H - pad.b); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(fmtX(t, isTimeAxis), px, H - pad.b + 5);
+    }
+
+    const maxPts = Math.max(300, (W - pad.l - pad.r) * 2);
+    let totalPts = 0, shownPts = 0;
+    for (const s of series) {
+      let xs = s.xref.x, ys = s.y;
+      totalPts += xs.length;
+      if ($('markersonly').checked) { const d = downsample(xs, ys, maxPts); xs = d.x; ys = d.y; }
+      if (norm) ys = (s.mx > s.mn) ? Float64Array.from(ys, v => (v - s.mn) / (s.mx - s.mn)) : Float64Array.from(ys, () => 0.5);
+      shownPts += xs.length;
+      ctx.strokeStyle = seriesColor(s.colorIdx, s.slot);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(slotDash(s.slot));
+      ctx.beginPath();
+      let pen = false;
+      for (let i = 0; i < xs.length; i++) {
+        const vx = xs[i], vy = ys[i];
+        if (Number.isNaN(vx) || Number.isNaN(vy)) { pen = false; continue; }
+        const px = X(vx), py = Y(vy);
+        if (!pen) { ctx.moveTo(px, py); pen = true; } else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if ($('dots').checked) {
+        ctx.fillStyle = ctx.strokeStyle;
+        for (let i = 0; i < xs.length; i++) {
+          if (Number.isNaN(xs[i]) || Number.isNaN(ys[i])) continue;
+          ctx.fillRect(X(xs[i]) - 1.5, Y(ys[i]) - 1.5, 3, 3);
+        }
+      }
+    }
+
+    if (dragStart != null && dragStart.current != null) {
+      const a = Math.min(dragStart.current, dragStart.px), b = Math.max(dragStart.current, dragStart.px);
+      ctx.fillStyle = '#4ea1ff22';
+      ctx.fillRect(a, pad.t, b - a, H - pad.t - pad.b);
+    }
+
+    $('stat-left').textContent =
+      `${series.length} series | ${totalPts.toLocaleString()} pts total, ${shownPts.toLocaleString()} drawn` +
+      (viewX ? ' | zoomed' : '');
+  }
+
+  function niceTicks(lo, hi, count) {
+    const span = hi - lo;
+    if (!(span > 0)) return [lo];
+    const raw = span / count;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    const step = (norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10) * mag;
+    const out = [];
+    for (let t = Math.ceil(lo / step) * step; t <= hi + step * 1e-9; t += step) out.push(t);
+    return out;
+  }
+
+  function renderLegend(series) {
+    const el = $('legend');
+    el.innerHTML = '';
+    for (const slot of SLOTS) {
+      const items = series.filter(s => s.slot === slot);
+      if (!items.length) continue;
+      const g = document.createElement('div');
+      g.className = 'lgroup';
+      const t = document.createElement('div');
+      t.className = 'lgtitle';
+      t.style.color = `var(--${slot.toLowerCase()})`;
+      t.textContent = slotName(slot);
+      t.title = files[slot].name;
+      g.appendChild(t);
+      const wrap = document.createElement('div');
+      wrap.className = 'lgitems';
+      for (const s of items) {
+        const d = document.createElement('span');
+        d.className = 'item';
+        const sw = document.createElement('span');
+        sw.className = 'swatch';
+        sw.style.borderTopColor = seriesColor(s.colorIdx, s.slot);
+        sw.style.borderTopStyle = s.slot === 'A' ? 'solid' : s.slot === 'B' ? 'dashed' : 'dotted';
+        const tx = document.createElement('span');
+        tx.textContent = s.col;
+        tx.title = files[s.slot].name;
+        d.appendChild(sw); d.appendChild(tx);
+        wrap.appendChild(d);
+      }
+      g.appendChild(wrap);
+      el.appendChild(g);
+    }
+  }
+
+  canvas.addEventListener('mousemove', (e) => { if (dragStart) { dragStart.current = e.offsetX; draw(); } showTooltip(e); });
+  canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; if (dragStart) { dragStart = null; draw(); } });
+  canvas.addEventListener('mousedown', (e) => { dragStart = { px: e.offsetX, current: e.offsetX }; });
+  canvas.addEventListener('mouseup', (e) => {
+    if (!dragStart) return;
+    const a = Math.min(dragStart.px, e.offsetX), b = Math.max(dragStart.px, e.offsetX);
+    dragStart = null;
+    if (b - a < 6) { draw(); return; }
+    const W = canvas.clientWidth, pad = { l: 64, r: 14 };
+    let x0 = Infinity, x1 = -Infinity;
+    for (const s of seriesCache) { const x = s.xref.x; for (let i = 0; i < x.length; i++) if (!Number.isNaN(x[i])) { if (x[i] < x0) x0 = x[i]; if (x[i] > x1) x1 = x[i]; } }
+    if (!isFinite(x0) || !isFinite(x1)) return;
+    const toVal = (px) => x0 + (px - pad.l) / (W - pad.l - pad.r) * (x1 - x0);
+    viewX = [toVal(a), toVal(b)];
+    $('resetzoom').style.display = '';
+    draw();
+  });
+  canvas.addEventListener('dblclick', () => { viewX = null; $('resetzoom').style.display = 'none'; draw(); });
+
+  // ---- PNG export: chart canvas + re-rendered legend, saved via native picker ----
+  $('exportbtn').addEventListener('click', exportPNG);
+
+  async function exportPNG() {
+    if (!seriesCache.length) { $('stat-left').textContent = 'nothing to export - plot at least one series'; return; }
+    const dpr = window.devicePixelRatio || 1;
+    const padPx = Math.round(12 * dpr);
+    const legendRowH = Math.round(20 * dpr);
+    const font = Math.round(12 * dpr) + 'px system-ui, sans-serif';
+    const gap = Math.round(18 * dpr), swatchW = Math.round(22 * dpr), swatchGap = Math.round(6 * dpr);
+    const W = canvas.width + padPx * 2;
+
+    // grouped legend: one title row + wrapped item rows per friendly name
+    const m = document.createElement('canvas').getContext('2d');
+    const fontBold = '600 ' + font;
+    const maxW = W - padPx * 2;
+    const layout = [];   // {kind:'title',text,color} | {kind:'item',e,x} rows: [{items:[{e,x}]}]
+    const rows = [];
+    for (const slot of SLOTS) {
+      const items = seriesCache.filter(s => s.slot === slot);
+      if (!items.length) continue;
+      rows.push({ title: slotName(slot), color: css.getPropertyValue('--' + slot.toLowerCase()).trim(), items: [] });
+      let cur = { items: [] }, x = 0;
+      for (const s of items) {
+        m.font = font;
+        const label = s.col;
+        const w = swatchW + swatchGap + m.measureText(label).width;
+        const e = { s, label, w };
+        if (cur.items.length && x + gap + e.w > maxW) { rows[rows.length - 1].items.push(cur); cur = { items: [] }; x = 0; }
+        if (cur.items.length) x += gap;
+        e.x = x; x += e.w;
+        cur.items.push(e);
+      }
+      rows[rows.length - 1].items.push(cur);
+    }
+    const legendH = (rows.length + rows.reduce((n, r) => n + r.items.length, 0)) * legendRowH + Math.round(4 * dpr);
+
+    const out = document.createElement('canvas');
+    out.width = W; out.height = canvas.height + legendH + padPx * 2;
+    const c2 = out.getContext('2d');
+    c2.fillStyle = css.getPropertyValue('--bg').trim() || '#14171c';
+    c2.fillRect(0, 0, out.width, out.height);
+
+    let y = padPx;
+    c2.textBaseline = 'middle';
+    for (const group of rows) {
+      c2.font = fontBold;
+      c2.fillStyle = group.color || (css.getPropertyValue('--fg').trim() || '#d7dce4');
+      c2.fillText(group.title, padPx, y + legendRowH / 2);
+      y += legendRowH;
+      for (const itemRow of group.items) {
+        for (const e of itemRow.items) {
+          const yMid = y + legendRowH / 2;
+          const cx = padPx + e.x;
+          c2.strokeStyle = seriesColor(e.s.colorIdx, e.s.slot);
+          c2.lineWidth = Math.max(2, dpr);
+          c2.setLineDash(e.s.slot === 'B' ? [3 * dpr, 2 * dpr] : e.s.slot === 'C' ? [dpr, 1.5 * dpr] : []);
+          c2.beginPath(); c2.moveTo(cx, yMid); c2.lineTo(cx + swatchW, yMid); c2.stroke();
+          c2.setLineDash([]);
+          c2.fillStyle = css.getPropertyValue('--fg').trim() || '#d7dce4';
+          c2.font = font;
+          c2.fillText(e.label, cx + swatchW + swatchGap, yMid);
+        }
+        y += legendRowH;
+      }
+    }
+    c2.drawImage(canvas, padPx, padPx + legendH);
+
+    const fname = 'telemetry-chart-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.png';
+    const blob = await new Promise((res) => out.toBlob(res, 'image/png'));
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fname,
+          types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }],
+        });
+        const w = await handle.createWritable();
+        await w.write(blob);
+        await w.close();
+        $('stat-left').textContent = 'saved ' + handle.name;
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;   // user cancelled
+        // picker unavailable (permissions/unsupported context): fall through to download
+      }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    $('stat-left').textContent = 'exported ' + fname;
+  }
+
+  function showTooltip(e) {
+    const series = seriesCache;
+    if (!series.length) { tooltip.style.display = 'none'; return; }
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    const pad = { l: 64, r: 14 };
+    let x0 = Infinity, x1 = -Infinity;
+    for (const s of series) { const x = s.xref.x; for (let i = 0; i < x.length; i++) if (!Number.isNaN(x[i])) { if (x[i] < x0) x0 = x[i]; if (x[i] > x1) x1 = x[i]; } }
+    if (viewX) { x0 = viewX[0]; x1 = viewX[1]; }
+    const val = x0 + (e.offsetX - pad.l) / (W - pad.l - pad.r) * (x1 - x0);
+    const rows = [];
+    for (const s of series) {
+      const x = s.xref.x, y = s.y;
+      let bi = -1, bd = Infinity;
+      for (let i = 0; i < x.length; i++) {
+        if (Number.isNaN(x[i])) continue;
+        const d = Math.abs(x[i] - val);
+        if (d < bd) { bd = d; bi = i; }
+      }
+      if (bi >= 0 && bd < (x1 - x0) * 0.05 + 1e-9) {
+        rows.push({ color: seriesColor(s.colorIdx, s.slot), label: `${s.col} (${slotTag(s.slot)})`, v: y[bi], x: x[bi], isTime: s.xref.isTime });
+      }
+    }
+    if (!rows.length) { tooltip.style.display = 'none'; return; }
+    tooltip.innerHTML = '<div class="tt-x">x = ' + fmtX(rows[0].x, rows[0].isTime) + '</div>' +
+      rows.map(r => `<div class="tt-row"><span style="color:${r.color}">${r.label}</span><b>${Number.isFinite(r.v) ? fmtY(r.v) : 'n/a'}</b></div>`).join('');
+    tooltip.style.display = 'block';
+    const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
+    let lx = e.offsetX + 14, ly = e.offsetY + 10;
+    if (lx + tw > W - 4) lx = e.offsetX - tw - 14;
+    if (ly + th > H - 4) ly = H - th - 4;
+    tooltip.style.left = lx + 'px';
+    tooltip.style.top = ly + 'px';
+  }
+
+  window.addEventListener('resize', draw);
+  draw();
+})();
+</script>
+</body>
+</html>
