@@ -2,117 +2,145 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Telemetry Compare</title>
+<title>DEVIL - Data Evaluation and Visualization In Lines</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="satan-theme.css">
 <style>
+/* All colors, fonts, and the grid backdrop come from satan-theme.css
+   (shared SATAN theme + vendored IBM Plex fonts). DEVIL-only tokens:
+   slot series colors A = green, B = amber, C = blue (SATAN accents). */
 :root {
-  --bg: #14171c;
-  --panel: #1c2027;
-  --panel-2: #232833;
-  --border: #323a48;
-  --fg: #d7dce4;
-  --fg-dim: #8a93a3;
-  --a: #4ea1ff;
-  --b: #ff9f43;
-  --c: #5be08a;
-  --grid: #2a3140;
+  color-scheme: dark;
+  --a: var(--green);
+  --b: var(--amber);
+  --c: var(--blue);
+  --grid: var(--line-strong);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-body {
-  background: var(--bg); color: var(--fg);
-  font: 13px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
-  display: flex; flex-direction: column;
-}
-header {
-  display: flex; align-items: baseline; gap: 12px;
-  padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
-}
-header h1 { font-size: 15px; margin: 0; font-weight: 600; }
-header .sub { color: var(--fg-dim); font-size: 12px; }
+body { overflow: hidden; }
 
-#layout { flex: 1; display: flex; min-height: 0; }
+/* workspace shell: theme .app, full-bleed for a daily-use tool */
+.app {
+  max-width: none;
+  padding: clamp(12px, 1.6vh, 20px) clamp(18px, 2.2vw, 34px);
+  gap: clamp(10px, 1.4vh, 16px);
+}
+
+/* header: SATAN wordmark block, scaled compact so chart space is preserved */
+header.header { gap: 5px; padding-bottom: 10px; }
+header.header .wordmark { font-size: clamp(26px, 3vw, 40px); }
+header.header .full-title { font-size: clamp(13px, 1.3vw, 18px); }
+header.header .tagline { font-size: clamp(11.5px, 1vw, 13.5px); }
+header.header .meta-bar { font-size: clamp(9.5px, 0.8vw, 11px); }
+
+#layout { flex: 1 1 auto; display: flex; min-height: 0; gap: clamp(12px, 1.4vw, 18px); }
 #sidebar {
-  width: 350px; min-width: 300px; border-right: 1px solid var(--border);
-  background: var(--panel); display: flex; flex-direction: column; overflow-y: auto;
+  width: 350px; min-width: 300px; display: flex; flex-direction: column;
+  gap: 12px; overflow-y: auto; padding-bottom: 4px;
 }
-#main { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 12px 14px; gap: 10px; }
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; gap: 10px; }
 
-.section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.section {
+  background: var(--bg-panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+}
 .section h2 {
-  margin: 0 0 8px; font-size: 11px; text-transform: uppercase;
-  letter-spacing: .08em; color: var(--fg-dim); font-weight: 600;
+  margin: 0; font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .14em; color: var(--text-faint); font-weight: 700;
 }
-.filebox { margin-bottom: 10px; }
-.filebox label.tag { display: inline-block; font-weight: 700; font-size: 11px; margin-bottom: 4px; }
+.section h2 .accent { color: var(--green); }
+.filebox { margin-bottom: 2px; }
+.filebox label.tag { display: inline-block; font-family: var(--font-mono); font-weight: 700; font-size: 11px; letter-spacing: .08em; margin-bottom: 4px; }
 .tag.A { color: var(--a); } .tag.B { color: var(--b); } .tag.C { color: var(--c); }
-.filebox input[type=file] { width: 100%; color: var(--fg-dim); font-size: 12px; }
+.filebox input[type=file] { width: 100%; color: var(--text-dim); font-size: 12px; font-family: var(--font-mono); }
 .filebox input.fname { width: 100%; margin-top: 4px; }
-.filebox .meta { margin-top: 4px; color: var(--fg-dim); font-size: 12px; min-height: 16px; white-space: pre-line; }
-.filebox .meta.err { color: #ff6b6b; }
+.filebox .meta { margin-top: 4px; color: var(--text-faint); font-family: var(--font-mono); font-size: 11.5px; min-height: 16px; white-space: pre-line; }
+.filebox .meta.err { color: var(--red); }
 
-.rowline { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.rowline { display: flex; align-items: center; gap: 8px; margin: 4px 0; flex-wrap: wrap; }
 select, button, input[type=text] {
-  background: var(--panel-2); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 5px; padding: 4px 8px; font-size: 12px;
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--bg-panel-2); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px;
 }
-input[type=text] { width: 100%; }
-button { cursor: pointer; }
-button:hover { border-color: var(--a); }
-label.opt { color: var(--fg-dim); display: flex; align-items: center; gap: 5px; cursor: pointer; }
-input[type=checkbox] { accent-color: var(--a); }
+input[type=text] { width: 100%; letter-spacing: .02em; }
+input[type=text]:focus, select:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+button { cursor: pointer; font-weight: 600; transition: border-color .15s ease, background .15s ease, color .15s ease; }
+button:hover { border-color: var(--green); }
+button:disabled { opacity: .4; cursor: not-allowed; border-color: var(--line); }
+button.primary { border-color: var(--green); color: var(--green); }
+button.primary:hover { background: var(--green-dim); }
+label.opt { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 5px; cursor: pointer; }
+input[type=checkbox], input[type=radio] { accent-color: var(--green); }
 
 #collist { display: flex; flex-direction: column; max-height: 40vh; overflow-y: auto; }
 #colrows { display: flex; flex-direction: column; gap: 2px; }
-.colhdrs { position: sticky; top: 0; z-index: 2; background: var(--panel); }
-.colrow { display: grid; grid-template-columns: 1fr 20px 20px 20px; align-items: center; padding: 3px 6px; border-radius: 4px; gap: 4px; }
+.colhdrs { position: sticky; top: 0; z-index: 2; background: var(--bg-panel); }
+.colrow { display: grid; grid-template-columns: 1fr 20px 20px 20px; align-items: center; padding: 3px 6px; border-radius: 6px; gap: 4px; }
 .colrow .cbA, .colrow .cbB, .colrow .cbC { display: flex; justify-content: center; }
-.colrow:hover { background: var(--panel-2); }
-.colrow .cname { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.colrow:hover { background: var(--bg-panel-2); }
+.colrow .cname { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .colrow input { margin: 0 auto; }
 .colrow .cbA input { accent-color: var(--a); }
 .colrow .cbB input { accent-color: var(--b); }
 .colrow .cbC input { accent-color: var(--c); }
 .colhdrs { display: grid; grid-template-columns: 1fr 20px 20px 20px; padding: 2px 6px; font-size: 10px;
-  text-transform: uppercase; color: var(--fg-dim); gap: 4px; letter-spacing: .05em; }
-.colhdrs .a, .colhdrs .b, .colhdrs .c { text-align: center; }
+  text-transform: uppercase; color: var(--text-faint); gap: 4px; letter-spacing: .08em; font-family: var(--font-mono); }
+.colhdrs .a, .colhdrs .b, .colhdrs .c { text-align: center; font-weight: 700; }
 .colhdrs .a { color: var(--a); } .colhdrs .b { color: var(--b); } .colhdrs .c { color: var(--c); }
 
 #chartwrap {
-  flex: 1; position: relative; background: var(--panel); border: 1px solid var(--border);
-  border-radius: 8px; min-height: 260px; overflow: hidden;
+  flex: 1; position: relative; background: var(--bg-panel); border: 1px solid var(--line);
+  border-radius: 10px; min-height: 260px; overflow: hidden;
 }
 #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
 #empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  color: var(--fg-dim); font-size: 13px; pointer-events: none; text-align: center; padding: 20px;
+  font-family: var(--font-mono); color: var(--text-faint); font-size: 13px; pointer-events: none; text-align: center; padding: 20px;
 }
 #legend { display: flex; flex-wrap: wrap; gap: 8px 28px; min-height: 18px; }
 #legend .lgroup { display: flex; flex-direction: column; gap: 3px; }
-#legend .lgtitle { font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+#legend .lgtitle { font-family: var(--font-mono); font-weight: 700; font-size: 12px; letter-spacing: .04em; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
 #legend .lgitems { display: flex; flex-wrap: wrap; gap: 4px 14px; }
-#legend .item { display: flex; align-items: center; gap: 6px; }
+#legend .item { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); }
 #legend .swatch { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
-#statusbar { display: flex; gap: 16px; color: var(--fg-dim); font-size: 12px; align-items: center; }
+#statusbar { display: flex; gap: 16px; color: var(--text-dim); font-family: var(--font-mono); font-size: 11.5px; align-items: center; }
 #tooltip {
-  position: absolute; pointer-events: none; background: #0e1116ee; border: 1px solid var(--border);
-  border-radius: 6px; padding: 6px 9px; font-size: 12px; display: none; z-index: 5;
-  max-width: 340px; box-shadow: 0 4px 14px #0008;
+  position: absolute; pointer-events: none; background: rgba(16, 22, 29, 0.96); border: 1px solid var(--line-strong);
+  border-radius: 8px; padding: 7px 10px; font-family: var(--font-mono); font-size: 11.5px; display: none; z-index: 5;
+  max-width: 340px; box-shadow: 0 4px 14px #000a;
 }
-#tooltip .tt-x { color: var(--fg-dim); margin-bottom: 3px; }
+#tooltip .tt-x { color: var(--text-dim); margin-bottom: 3px; }
 #tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Telemetry Compare</h1>
-  <span class="sub">up to 3 logger CSVs (HWiNFO64 / nvidia-smi / any logger), pick columns, compare runs</span>
+<div class="app">
+<header class="header">
+  <div class="eyebrow-top">Benchmark telemetry &middot; CSV comparison &middot; Offline analysis</div>
+  <div class="wordmark-row">
+    <h1 class="wordmark">DEVIL<span class="cursor"></span></h1>
+    <span class="status-chip"><span class="dot"></span>Offline ready</span>
+  </div>
+  <div class="full-title">Data Evaluation and Visualization In Lines</div>
+  <p class="tagline">Companion to the SATAN dashboard &mdash; load up to 3 logger CSVs (HWiNFO64 / nvidia-smi / any logger), pick columns, compare runs.</p>
+  <div class="meta-bar">
+    <span>Engine <b>Single-file HTML + canvas</b></span><span class="sep">&middot;</span>
+    <span>Loggers <b>HWiNFO64 &middot; nvidia-smi &middot; generic CSV</b></span><span class="sep">&middot;</span>
+    <span>Slots <b>A &middot; B &middot; C</b></span><span class="sep">&middot;</span>
+    <span>Network <b>None required</b></span>
+  </div>
 </header>
 
 <div id="layout">
   <div id="sidebar">
     <div class="section">
-      <h2>Data sources</h2>
+      <h2><span class="accent">01</span>&nbsp;&middot;&nbsp;Data sources</h2>
       <div class="filebox">
         <label class="tag A">File A</label>
         <input type="file" id="fileA" accept=".csv,.txt,text/csv">
@@ -134,7 +162,7 @@ input[type=checkbox] { accent-color: var(--a); }
     </div>
 
     <div class="section">
-      <h2>X axis</h2>
+      <h2><span class="accent">02</span>&nbsp;&middot;&nbsp;X axis</h2>
       <div class="rowline">
         <select id="xcol"><option value="">(row index)</option></select>
       </div>
@@ -145,7 +173,7 @@ input[type=checkbox] { accent-color: var(--a); }
     </div>
 
     <div class="section" style="flex:1">
-      <h2>Columns &nbsp;<button id="clearsel" style="padding:1px 8px;font-size:11px">clear</button></h2>
+      <h2><span class="accent">03</span>&nbsp;&middot;&nbsp;Columns &nbsp;<button id="clearsel" style="padding:1px 8px;font-size:10px">clear</button></h2>
       <div class="rowline"><input type="text" id="colfilter" placeholder="filter columns... (e.g. gpu, temp, clock)"></div>
       <div id="collist">
         <div class="colhdrs"><span></span><span class="a">A</span><span class="b">B</span><span class="c">C</span></div>
@@ -154,6 +182,7 @@ input[type=checkbox] { accent-color: var(--a); }
     </div>
 
     <div class="section">
+      <h2><span class="accent">04</span>&nbsp;&middot;&nbsp;Display</h2>
       <div class="rowline">
         <label class="opt"><input type="checkbox" id="normalize"> normalize each series (min-max)</label>
       </div>
@@ -173,10 +202,11 @@ input[type=checkbox] { accent-color: var(--a); }
     </div>
     <div id="statusbar">
       <span id="stat-left">ready</span>
-      <button id="resetzoom" style="display:none">reset zoom</button>
-      <button id="exportbtn">Export Chart</button>
+      <button id="resetzoom" style="display:none">Reset zoom</button>
+      <button id="exportbtn" class="primary">Export Chart</button>
     </div>
   </div>
+</div>
 </div>
 
 <script>
@@ -525,12 +555,20 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     return n.length > 24 ? n.slice(0, 23) + '…' : n;
   }
 
+  // SATAN accent palette: slot A = green, B = amber, C = blue.
+  // Extra columns in a slot cycle through the other accents (then lighter /
+  // darker variants) so they stay distinguishable and stay on-theme
+  // (never red - SATAN reserves red for errors).
+  const SATAN_ACCENT = { A: '#76B900', B: '#FFB020', C: '#4FA8E0' };
+  const SATAN_HSL = { A: [78, 100, 42], B: [39, 100, 57], C: [202, 70, 62] };
+  const ALT_ORDER = { A: ['B', 'C', 'A'], B: ['A', 'C', 'B'], C: ['B', 'A', 'C'] };
   function seriesColor(colorIdx, slot) {
-    const hues = [205, 28, 145, 330, 90, 260, 15, 185, 55];
-    const h = hues[colorIdx % hues.length];
-    const l = slot === 'A' ? 62 : slot === 'B' ? 58 : 55;
-    const s = slot === 'A' ? 90 : 95;
-    return `hsl(${h} ${s}% ${l}%)`;
+    if (colorIdx === 0) return SATAN_ACCENT[slot];
+    const k = ALT_ORDER[slot][(colorIdx - 1) % 3];
+    const [h, s, l] = SATAN_HSL[k];
+    const round = Math.floor((colorIdx - 1) / 3) + 1;   // 2nd pass: lighter, 3rd: darker
+    const dl = round % 2 ? round * 11 : -round * 8;
+    return `hsl(${h} ${s}% ${Math.max(28, Math.min(78, l + dl))}%)`;
   }
   function slotDash(slot) { return slot === 'A' ? [] : slot === 'B' ? [6, 4] : [2, 3]; }
 
@@ -639,9 +677,9 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     const Y = (v) => H - pad.b - (v - y0) / (y1 - y0) * (H - pad.t - pad.b);
 
     ctx.strokeStyle = css.getPropertyValue('--grid').trim();
-    ctx.fillStyle = css.getPropertyValue('--fg-dim').trim();
+    ctx.fillStyle = css.getPropertyValue('--text-dim').trim();
     ctx.lineWidth = 1;
-    ctx.font = '11px system-ui, sans-serif';
+    ctx.font = '11px "IBM Plex Mono","Courier New",monospace';
     for (const t of niceTicks(y0, y1, 6)) {
       const py = Math.round(Y(t)) + 0.5;
       ctx.beginPath(); ctx.moveTo(pad.l, py); ctx.lineTo(W - pad.r, py); ctx.stroke();
@@ -688,7 +726,7 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
 
     if (dragStart != null && dragStart.current != null) {
       const a = Math.min(dragStart.current, dragStart.px), b = Math.max(dragStart.current, dragStart.px);
-      ctx.fillStyle = '#4ea1ff22';
+      ctx.fillStyle = 'rgba(118, 185, 0, 0.16)';  // SATAN green selection band
       ctx.fillRect(a, pad.t, b - a, H - pad.t - pad.b);
     }
 
@@ -770,7 +808,7 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     const dpr = window.devicePixelRatio || 1;
     const padPx = Math.round(12 * dpr);
     const legendRowH = Math.round(20 * dpr);
-    const font = Math.round(12 * dpr) + 'px system-ui, sans-serif';
+    const font = Math.round(12 * dpr) + 'px "IBM Plex Mono","Courier New",monospace';
     const gap = Math.round(18 * dpr), swatchW = Math.round(22 * dpr), swatchGap = Math.round(6 * dpr);
     const W = canvas.width + padPx * 2;
 
@@ -802,14 +840,14 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     const out = document.createElement('canvas');
     out.width = W; out.height = canvas.height + legendH + padPx * 2;
     const c2 = out.getContext('2d');
-    c2.fillStyle = css.getPropertyValue('--bg').trim() || '#14171c';
+    c2.fillStyle = css.getPropertyValue('--bg').trim() || '#0A0E13';
     c2.fillRect(0, 0, out.width, out.height);
 
     let y = padPx;
     c2.textBaseline = 'middle';
     for (const group of rows) {
       c2.font = fontBold;
-      c2.fillStyle = group.color || (css.getPropertyValue('--fg').trim() || '#d7dce4');
+      c2.fillStyle = group.color || (css.getPropertyValue('--text').trim() || '#E7EDF3');
       c2.fillText(group.title, padPx, y + legendRowH / 2);
       y += legendRowH;
       for (const itemRow of group.items) {
@@ -821,7 +859,7 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
           c2.setLineDash(e.s.slot === 'B' ? [3 * dpr, 2 * dpr] : e.s.slot === 'C' ? [dpr, 1.5 * dpr] : []);
           c2.beginPath(); c2.moveTo(cx, yMid); c2.lineTo(cx + swatchW, yMid); c2.stroke();
           c2.setLineDash([]);
-          c2.fillStyle = css.getPropertyValue('--fg').trim() || '#d7dce4';
+          c2.fillStyle = css.getPropertyValue('--text').trim() || '#E7EDF3';
           c2.font = font;
           c2.fillText(e.label, cx + swatchW + swatchGap, yMid);
         }
@@ -830,7 +868,7 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     }
     c2.drawImage(canvas, padPx, padPx + legendH);
 
-    const fname = 'telemetry-chart-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.png';
+    const fname = 'devil-chart-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.png';
     const blob = await new Promise((res) => out.toBlob(res, 'image/png'));
     if (window.showSaveFilePicker) {
       try {

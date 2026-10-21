@@ -5,7 +5,7 @@ const puppeteer = require('puppeteer-core');
   await page.setViewport({ width: 1400, height: 900 });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('file:///home/dell01/telemetry-compare/index.html');
+  await page.goto('file://' + require('path').resolve(__dirname, 'index.html'));
   const input = await page.$('#fileA');
   await input.uploadFile((process.env.TEST_A || require('path').resolve(__dirname, 'testData/PW714260-82DRYL4-hwinfo.CSV')));
   await page.waitForFunction(() => document.getElementById('metaA').textContent.includes('rows'));

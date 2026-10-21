@@ -1,8 +1,14 @@
-# Telemetry Compare
+# DEVIL - Data Evaluation and Visualization In Lines
 
 A single-file, zero-dependency web utility for comparing hardware benchmark
 telemetry logs. Open `index.html` in any modern browser - no server, no build,
 works fully offline (fine for air-gapped benchmark boxes).
+
+A companion to the **SATAN** dashboard (Systematic Analysis Tool with Agentic
+Nodes): DEVIL wears the shared SATAN theme (`satan-theme.css` + vendored
+IBM Plex fonts) - same dark `#0A0E13` backdrop with grid, green/amber/blue
+accents, mono wordmark header, and numbered panels. Slot colors:
+**A = green `#76B900`, B = amber `#FFB020`, C = blue `#4FA8E0`**.
 
 ![chart](docs/screenshot.png)
 
@@ -42,6 +48,8 @@ out).
 | File | Purpose |
 |---|---|
 | `index.html` | The whole tool: parser core + UI + canvas charting |
+| `satan-theme.css` | Shared SATAN theme (tokens, fonts, primitives) - link, don't fork |
+| `fonts/` | Vendored IBM Plex Mono/Sans (required by the theme, fully offline) |
 | `test.js` | Node unit tests for the parser core (run `npm test`) |
 | `e2e*.js` | Headless-Chrome end-to-end tests (run `npm run test:e2e`) |
 

@@ -6,7 +6,7 @@ const fs = require('fs');
   await page.setViewport({ width: 1400, height: 900 });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('file:///home/dell01/telemetry-compare/index.html');
+  await page.goto('file://' + require('path').resolve(__dirname, 'index.html'));
   const F = (process.env.TEST_A || require('path').resolve(__dirname, 'testData/PW714260-82DRYL4-hwinfo.CSV'));
   await (await page.$('#fileA')).uploadFile(F);
   await (await page.$('#fileB')).uploadFile(F);

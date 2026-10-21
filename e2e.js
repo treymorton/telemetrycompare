@@ -7,7 +7,7 @@ const puppeteer = require('puppeteer-core');
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
 
-  await page.goto('file:///home/dell01/telemetry-compare/index.html');
+  await page.goto('file://' + require('path').resolve(__dirname, 'index.html'));
   const A = (process.env.TEST_A || require('path').resolve(__dirname, 'testData/PW714260-82DRYL4-hwinfo.CSV'));
   const B = (process.env.TEST_A || require('path').resolve(__dirname, 'testData/PW714260-82DRYL4-hwinfo.CSV'));  // same logger, second run stand-in
   const C = (process.env.TEST_B || require('path').resolve(__dirname, 'testData/PW714260-82DRYL4-nvperf_log_20261021_074559.csv'));
