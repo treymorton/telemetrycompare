@@ -1,0 +1,5 @@
+node_modules/
+dl/
+core.js
+/*.png
+testData/

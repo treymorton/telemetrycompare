@@ -1,0 +1,16 @@
+{
+  "name": "telemetry-compare",
+  "version": "1.0.0",
+  "description": "Offline HTML utility for comparing hardware benchmark telemetry CSV logs",
+  "scripts": {
+    "extract": "sed -n '/^<script>$/,/^<\\/script>$/p' index.html | sed '1d;$d' > core.js",
+    "test": "npm run extract && node test.js",
+    "test:e2e": "node e2e.js"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "puppeteer-core": "^25.15.0"
+  },
+  "license": "MIT"
+}
