@@ -36,3 +36,38 @@ console.log('sample of numeric cols:', Object.keys(hw.num).slice(0,6));
 // downsample sanity
 const ds = c.downsample(dtc, core, 100);
 console.log('downsample 246->' + ds.x.length, 'in-range:', ds.y.every(v => Number.isNaN(v) || (v>=0 && v<=100)));
+
+// --- describeColumn look-up ---
+function expectDesc(name, substr) {
+  const d = c.describeColumn(name);
+  if (!d || !d.toLowerCase().includes(substr.toLowerCase())) {
+    console.error('FAIL describeColumn(' + JSON.stringify(name) + ') = ' + JSON.stringify(d) + ', expected to contain: ' + substr);
+    process.exitCode = 1;
+  }
+}
+expectDesc('gpu_util_pct', 'busy');
+expectDesc('cpu_queue_length', 'bottleneck');
+expectDesc('timestamp', 'date and time');
+expectDesc('Date', 'calendar');
+expectDesc('Total CPU Usage [%]', 'across all cores');
+expectDesc('P-core 3 Usage [%]', 'this cpu core');
+expectDesc('P-core 3 Distance to TjMAX [\u00B0C]', 'throttl');
+expectDesc('GPU Temperature [\u00B0C]', 'gpu temperature');
+expectDesc('GPU Hot Spot Temperature [\u00B0C]', 'hottest');
+expectDesc('GPU Memory Usage [%]', 'vram');
+expectDesc('Physical Memory Load [%]', 'ram');
+expectDesc('Read Rate [MB/s]', 'disk read');
+expectDesc('Core Clocks (avg) [MHz]', 'clock speed');
+expectDesc('Core Effective Clocks (avg) [MHz]', 'actual performance');
+expectDesc('Package C State Residency [%]', 'sleep state');
+expectDesc('Framerate Displayed (avg) [FPS]', 'monitor');
+if (c.describeColumn('Totally Made Up Widget') !== '') { console.error('FAIL: unknown column should describe as empty'); process.exitCode = 1; }
+// coverage over the real 493-column HWiNFO header set
+const described = hw.headers.filter(h => c.describeColumn(h));
+const cov = described.length / hw.headers.length;
+console.log('describeColumn coverage of ' + hw.headers.length + ' real HWiNFO headers: ' + described.length + ' (' + Math.round(cov * 100) + '%)');
+if (cov < 0.9) { console.error('FAIL: <90% header coverage'); process.exitCode = 1; }
+const nvc = Object.keys(nv.num).filter(h => c.describeColumn(h)).length;
+console.log('describeColumn coverage of nvperf numeric columns: ' + nvc + '/' + Object.keys(nv.num).length);
+if (nvc < Object.keys(nv.num).length) { console.error('FAIL: nvperf columns missing descriptions'); process.exitCode = 1; }
+console.log('describeColumn: ' + (process.exitCode ? 'FAILURES ABOVE' : 'all assertions OK'));
