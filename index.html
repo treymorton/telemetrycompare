@@ -94,6 +94,18 @@ input[type=checkbox] { accent-color: var(--a); }
 #legend .item { display: flex; align-items: center; gap: 6px; }
 #legend .swatch { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
 #statusbar { display: flex; gap: 16px; color: var(--fg-dim); font-size: 12px; align-items: center; }
+#guide {
+  flex: 0 0 auto; max-height: 24vh; overflow-y: auto; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+#guide h2 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-dim); font-weight: 600; }
+#guideitems { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 4px 26px; }
+.gitem { display: flex; align-items: baseline; gap: 8px; font-size: 12px; min-width: 0; }
+.gitem .gswatch { flex: 0 0 18px; align-self: center; width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
+.gitem .gname { color: var(--fg); font-weight: 600; white-space: nowrap; }
+.gitem .gslots { color: var(--fg-dim); white-space: nowrap; }
+.gitem .gdesc { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tooltip {
   position: absolute; pointer-events: none; background: #0e1116ee; border: 1px solid var(--border);
   border-radius: 6px; padding: 6px 9px; font-size: 12px; display: none; z-index: 5;
@@ -161,6 +173,9 @@ input[type=checkbox] { accent-color: var(--a); }
         <label class="opt"><input type="checkbox" id="dots"> show points</label>
         <label class="opt"><input type="checkbox" id="markersonly" checked> smart decimate</label>
       </div>
+      <div class="rowline">
+        <label class="opt"><input type="checkbox" id="guidebtn" checked> field guide (chart + export)</label>
+      </div>
     </div>
   </div>
 
@@ -170,6 +185,10 @@ input[type=checkbox] { accent-color: var(--a); }
       <canvas id="chart"></canvas>
       <div id="empty">Select one to three CSV files on the left,<br>then tick columns (A/B/C) to plot.</div>
       <div id="tooltip"></div>
+    </div>
+    <div id="guide" style="display:none">
+      <h2>Field guide</h2>
+      <div id="guideitems"></div>
     </div>
     <div id="statusbar">
       <span id="stat-left">ready</span>
@@ -379,8 +398,119 @@ function lttb(x, y, threshold) {
 }
 
 // export for node unit tests; browser ignores this
+// ---- Plain-language look-up for column titles (tooltips + field guide) ----
+// Exact names (nvidia-smi logger) first, then ordered regex rules (HWiNFO
+// column families and other loggers). First match wins; '' = no description.
+const NV_COL_DESCS = {
+  timestamp: 'Date and time the sample was taken',
+  run_label: 'Run label set by the logging script',
+  elapsed_sec: 'Seconds since the run started',
+  gpu_util_pct: 'How busy the GPU was, 0-100%',
+  gpu_mem_used_mb: 'GPU memory (VRAM) in use, MB',
+  gpu_mem_total_mb: 'GPU memory (VRAM) installed, MB',
+  gpu_mem_free_mb: 'GPU memory (VRAM) free, MB',
+  gpu_temp_c: 'GPU temperature, °C',
+  gpu_power_draw_w: 'Power drawn by the GPU, watts',
+  gpu_power_limit_w: 'Power cap for the GPU, watts',
+  gpu_clk_graphics_mhz: 'GPU graphics clock, MHz',
+  gpu_clk_memory_mhz: 'GPU memory (VRAM) clock, MHz',
+  gpu_clk_sm_mhz: 'GPU SM (compute) clock, MHz',
+  gpu_pcie_gen: 'PCIe link generation',
+  gpu_pcie_width: 'PCIe lanes in use (link width)',
+  cpu_util_total_pct: 'Total CPU busy across all cores, 0-100%',
+  cpu_util_core_avg_pct: 'Average per-core CPU busy, 0-100%',
+  cpu_util_core_max_pct: 'Busiest single CPU core, 0-100%',
+  cpu_perf_pct: 'CPU performance vs maximum frequency',
+  cpu_ctx_switches_per_sec: 'OS task switches per second',
+  cpu_processes: 'Running processes',
+  cpu_threads: 'Running threads',
+  cpu_queue_length: 'Threads waiting for CPU time (high = CPU bottleneck)',
+};
+const HW_COL_RULES = [
+  [/^Date$/, 'Calendar date of the sample'],
+  [/^Time$/, 'Time of day of the sample'],
+  [/Date Time$/, 'Date and time of the sample'],
+  [/Distance to TjMAX/i, 'Heat headroom left before throttling, °C (smaller = hotter)'],
+  [/Critical Temperature/i, 'Flag: a critical temperature was reached'],
+  [/Thermal Throttling/i, 'Flag: clock speed cut back because of heat'],
+  [/Power Limit Exceeded/i, 'Flag: hitting the power limit'],
+  [/Performance Limit|Throttle Reasons|Limit Reasons/i, 'Which power/thermal cap is limiting speed right now'],
+  [/Framerate Displayed/i, 'Frames per second shown on the monitor (avg / low percentile)'],
+  [/Framerate Presented/i, 'Frames per second produced by the app (avg / low percentile)'],
+  [/Frame Time/i, 'Milliseconds taken per frame (lower = smoother)'],
+  [/Animation Error/i, 'Animation timing error vs display refresh, ms'],
+  [/Residency State Regulation|Running Average Thermal Limit|Thermal Event|VR Thermal Alert|VR TDC|PROCHOT|RAPL|PBM|Max Turbo Limit|Turbo Attenuation|Electrical Design Point|ICCmax|Inefficient Operation|Fuses limit|Avg\. Power \(PL|Burst Power \(PL|Current \(PL|Software Limit \[|Hardware Limit \[|^Thermal \[Yes\/No\]/i, 'Flag: active power/thermal limit or throttle reason'],
+  [/C[- ]?State Residency|C\d* Residency/i, 'Share of time in this CPU sleep state, 0-100% (C0 = running, C6/C7 = deepest sleep)'],
+  [/Total CPU Usage/i, 'Total CPU busy across all cores, 0-100%'],
+  [/Max CPU\/Thread Usage/i, 'Busiest single CPU core or thread, 0-100%'],
+  [/Core Usage/i, 'Average CPU core busy, 0-100%'],
+  [/(P|E)-core.*Usage/i, 'This CPU core busy, 0-100%'],
+  [/Utility/i, 'Work done weighted by clock speed, 0-100%'],
+  [/GPU (Computing|Copy Engine|Media|Video|3D).*Usage/i, 'This GPU engine busy, 0-100%'],
+  [/GPU.*Memory Usage/i, 'Share of GPU memory (VRAM) in use, 0-100%'],
+  [/GPU.*Memory (Dedicated|Dynamic|Allocated|Available)/i, 'GPU memory pool size, MB'],
+  [/Memory Controller Load|GPU Bus Load/i, 'GPU memory/bus subsystem busy, 0-100%'],
+  [/NPU.*Usage/i, 'NPU (AI engine) busy, 0-100%'],
+  [/NPU Clock/i, 'NPU (AI engine) clock, MHz'],
+  [/NPU.*Memory/i, 'Memory used by the NPU, MB'],
+  [/(GPU|NPU) .*?(Utilizations?|Usage|Load) \[%\]/i, 'This part of the GPU/NPU busy, 0-100%'],
+  [/GPU.*Hot Spot/i, 'Hottest point on the GPU die, °C'],
+  [/GPU (Memory|VRAM|A|B).*Temp/i, 'GPU memory temperature, °C'],
+  [/GPU.*Temp/i, 'GPU temperature, °C'],
+  [/Drive Temp/i, 'SSD temperature, °C'],
+  [/CPU (Package|IA Cores|GT Cores)/i, 'CPU temperature zone, °C'],
+  [/\[°C\]/, 'Temperature, °C'],
+  [/CPU Package Power/i, 'Total power consumed by the whole CPU, watts'],
+  [/GPU.*(Input|Output) Power/i, 'Power on this GPU supply rail, watts'],
+  [/GPU Power Limit/i, 'Power cap for the GPU, watts'],
+  [/\[W\]/, 'Power, watts'],
+  [/(Memory|RAM) Clock Ratio/i, 'RAM speed multiplier'],
+  [/Effective Clock/i, 'Actual performance clock (drops if stalled), MHz'],
+  [/Clock[^\[]*\[MHz\]/i, 'Clock speed, MHz'],
+  [/Ratios?.*\[x\]/i, 'Frequency multiplier (core clock ÷ bus clock)'],
+  [/\[V\]/, 'Voltage, volts'],
+  [/Physical Memory Used/i, 'Installed RAM in use, MB'],
+  [/Physical Memory Available/i, 'Installed RAM free, MB'],
+  [/Physical Memory Load/i, 'Share of installed RAM in use, 0-100%'],
+  [/Virtual Memory Committed/i, 'Memory programs have asked for, MB'],
+  [/Virtual Memory Available/i, 'Virtual memory headroom left, MB'],
+  [/Virtual Memory Load/i, 'Virtual memory in use, 0-100%'],
+  [/Page File/i, 'Windows pagefile (RAM spill space on disk)'],
+  [/Memory Clock/i, 'RAM clock speed, MHz'],
+  [/\bT(cas|ras|rcd|rc|rp)\b/i, 'DRAM timing latency, in clock cycles'],
+  [/(Read|Write|Total) Activity/i, 'Drive busy time, 0-100%'],
+  [/Read Rate/i, 'Disk read speed, MB/s'],
+  [/Write Rate/i, 'Disk write speed, MB/s'],
+  [/Read Total|Write Total/i, 'Data read/written since boot, MB'],
+  [/Total Host (Reads|Writes)/i, 'Total data read/written to this drive, GB'],
+  [/Remaining Life|Wear Level|Available Spare/i, 'SSD health / wear indicator'],
+  [/Drive (Failure|Warning)/i, 'Flag: drive reports failure or warning'],
+  [/(DL|UP) rate/i, 'Network speed right now, KB/s'],
+  [/Total (DL|UP) \[MB\]/i, 'Network data transferred since boot, MB'],
+  [/Charge Level/i, 'Battery charge, 0-100%'],
+  [/Charge Rate/i, 'Battery charging/discharging power, watts'],
+  [/Remaining Capacity/i, 'Battery energy left, watt-hours'],
+  [/Power Supply \[Yes\/No\]/i, 'Plugged into wall power?'],
+  [/PCIe Link Speed/i, 'PCIe link speed, gigatransfers/s'],
+  [/Bad (DLLP|TLP)|LCRC|Replay|Recovery Count|NAK|Receiver Errors|Unsupported Request|Error Count|Errors \[\]/i, 'PCIe error counter (should stay flat)'],
+  [/\[RPM\]/i, 'Fan speed, revolutions per minute'],
+  [/Fan Target/i, 'Fan commanded speed, 0-100%'],
+  [/Noise/i, 'Sound level, decibels'],
+  [/(CPU|GPU) (Busy|Wait)/i, 'Time per sample spent busy/waiting, ms'],
+  [/Clock Modulation/i, 'OS-forced clock throttling amount, 0-100%'],
+  [/cTDP/i, 'Configurable power limit (cTDP) profile level'],
+  [/Gear Mode/i, 'Intel thermal management gear (power/thermal mode)'],
+  [/Bus Clock/i, 'Base reference clock, MHz'],
+  [/Battery Voltage/i, 'Battery voltage, volts'],
+];
+function describeColumn(name) {
+  if (Object.prototype.hasOwnProperty.call(NV_COL_DESCS, name)) return NV_COL_DESCS[name];
+  for (const [re, d] of HW_COL_RULES) { if (re.test(name)) return d; }
+  return '';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { splitCsv, stripRepeatedHeader, toNum, parseTimeSec, buildTable, downsample, lttb, decodeBytes };
+  module.exports = { splitCsv, stripRepeatedHeader, toNum, parseTimeSec, buildTable, downsample, lttb, decodeBytes, describeColumn };
 }
 
 /* ============ UI layer ============ */
@@ -403,6 +533,7 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
   $('normalize').addEventListener('change', draw);
   $('dots').addEventListener('change', draw);
   $('markersonly').addEventListener('change', draw);
+  $('guidebtn').addEventListener('change', draw);
   $('colfilter').addEventListener('input', renderColumnList);
   $('clearsel').addEventListener('click', () => { selection.clear(); renderColumnList(); draw(); });
   $('resetzoom').addEventListener('click', () => { viewX = null; $('resetzoom').style.display = 'none'; draw(); });
@@ -490,7 +621,9 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
       name.textContent = h;
       const loaded = SLOTS.filter(s => files[s]);
       const avail = loaded.filter(s => files[s].table.num[h]);
-      name.title = h + (avail.length < loaded.length ? `\nnumeric only in: ${avail.join(', ')}` : '');
+      const desc = describeColumn(h);
+      name.title = (desc ? h + '\n' + desc : h) +
+        (avail.length < loaded.length ? `\nnumeric only in: ${avail.join(', ')}` : '');
       row.appendChild(name);
       for (const slot of SLOTS) {
         const w = document.createElement('span');
@@ -525,12 +658,18 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     return n.length > 24 ? n.slice(0, 23) + '…' : n;
   }
 
+  // Per-slot color FAMILIES: a column from file A is always bluish, B
+  // always orange, C always green - extra columns vary lightness INSIDE
+  // the slot's family so one file never borrows another file's color.
+  // 5 steps per family (index = which column # of that slot).
   function seriesColor(colorIdx, slot) {
-    const hues = [205, 28, 145, 330, 90, 260, 15, 185, 55];
-    const h = hues[colorIdx % hues.length];
-    const l = slot === 'A' ? 62 : slot === 'B' ? 58 : 55;
-    const s = slot === 'A' ? 90 : 95;
-    return `hsl(${h} ${s}% ${l}%)`;
+    const PAL = {
+      A: ['#4ea1ff', 'hsl(210 90% 78%)', 'hsl(225 85% 50%)', 'hsl(195 60% 85%)', 'hsl(232 95% 40%)'],
+      B: ['#ff9f43', 'hsl(25 100% 78%)', 'hsl(14 90% 54%)', 'hsl(36 75% 84%)', 'hsl(19 100% 42%)'],
+      C: ['#5be08a', 'hsl(150 70% 75%)', 'hsl(160 65% 44%)', 'hsl(138 50% 84%)', 'hsl(158 80% 34%)'],
+    };
+    const pal = PAL[slot];
+    return pal[colorIdx % pal.length];
   }
   function slotDash(slot) { return slot === 'A' ? [] : slot === 'B' ? [6, 4] : [2, 3]; }
 
@@ -556,15 +695,14 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
 
   function computeSeries() {
     const out = [];
-    let idx = 0;
-    for (const [h, sel] of selection) {
-      for (const slot of SLOTS) {
+    const next = { A: 0, B: 0, C: 0 };   // colorIdx counts per-slot, so each
+    for (const [h, sel] of selection) {  // slot's first column is always its
+      for (const slot of SLOTS) {        // base family color
         if (!sel[slot]) continue;
         const f = files[slot];
         if (!f || !f.table.num[h]) continue;
-        out.push({ col: h, slot, y: f.table.num[h], xref: getX(f.table), colorIdx: idx });
+        out.push({ col: h, slot, y: f.table.num[h], xref: getX(f.table), colorIdx: next[slot]++ });
       }
-      idx++;
     }
     return out;
   }
@@ -605,6 +743,7 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     seriesCache = series;
     $('empty').style.display = series.length ? 'none' : 'flex';
     renderLegend(series);
+    renderGuide(series);
     if (!series.length) { $('stat-left').textContent = 'ready'; return; }
 
     const norm = $('normalize').checked;
@@ -734,12 +873,54 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
         sw.style.borderTopStyle = s.slot === 'A' ? 'solid' : s.slot === 'B' ? 'dashed' : 'dotted';
         const tx = document.createElement('span');
         tx.textContent = s.col;
-        tx.title = files[s.slot].name;
+        const cd = describeColumn(s.col);
+        tx.title = (cd ? s.col + ' — ' + cd + '\n' : '') + 'from: ' + files[s.slot].name;
         d.appendChild(sw); d.appendChild(tx);
         wrap.appendChild(d);
       }
       g.appendChild(wrap);
       el.appendChild(g);
+    }
+  }
+
+  // dedup per column across slots: used by both the on-page guide and export
+  function guideRows(series) {
+    const seen = new Map();
+    for (const s of series) {
+      let e = seen.get(s.col);
+      if (!e) { e = { col: s.col, colorIdx: s.colorIdx, slots: [] }; seen.set(s.col, e); }
+      if (!e.slots.includes(s.slot)) e.slots.push(s.slot);
+    }
+    return [...seen.values()].map(e => ({
+      col: e.col, slots: e.slots, colorIdx: e.colorIdx,
+      color: seriesColor(e.colorIdx, e.slots[0]), desc: describeColumn(e.col) || 'column from log',
+    }));
+  }
+
+  function renderGuide(series) {
+    const box = $('guide'), items = $('guideitems');
+    if (!$('guidebtn').checked || !series.length) { box.style.display = 'none'; items.innerHTML = ''; return; }
+    box.style.display = '';
+    items.innerHTML = '';
+    for (const g of guideRows(series)) {
+      const row = document.createElement('div');
+      row.className = 'gitem';
+      const sw = document.createElement('span');
+      sw.className = 'gswatch';
+      sw.style.borderTopColor = g.color;
+      sw.style.borderTopStyle = g.slots[0] === 'A' ? 'solid' : g.slots[0] === 'B' ? 'dashed' : 'dotted';
+      const nm = document.createElement('span');
+      nm.className = 'gname';
+      nm.textContent = g.col;
+      const sl = document.createElement('span');
+      sl.className = 'gslots';
+      sl.textContent = '(' + g.slots.join(', ') + ')';
+      const ds = document.createElement('span');
+      ds.className = 'gdesc';
+      ds.textContent = g.desc;
+      ds.title = g.desc;
+      row.appendChild(sw); row.appendChild(nm); row.appendChild(sl); row.appendChild(ds);
+      items.appendChild(row);
     }
   }
 
@@ -799,8 +980,13 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
     }
     const legendH = (rows.length + rows.reduce((n, r) => n + r.items.length, 0)) * legendRowH + Math.round(4 * dpr);
 
+    // field guide section under the chart (plain-language field descriptions)
+    const grows = $('guidebtn').checked ? guideRows(seriesCache) : [];
+    const guideTitleH = Math.round(16 * dpr);
+    const guideH = grows.length ? Math.round(10 * dpr) + guideTitleH + grows.length * legendRowH : 0;
+
     const out = document.createElement('canvas');
-    out.width = W; out.height = canvas.height + legendH + padPx * 2;
+    out.width = W; out.height = canvas.height + legendH + guideH + padPx * 2;
     const c2 = out.getContext('2d');
     c2.fillStyle = css.getPropertyValue('--bg').trim() || '#14171c';
     c2.fillRect(0, 0, out.width, out.height);
@@ -829,6 +1015,39 @@ if (typeof document !== 'undefined' && document.getElementById('chart')) (functi
       }
     }
     c2.drawImage(canvas, padPx, padPx + legendH);
+
+    // draw field guide under the chart
+    if (guideH) {
+      const clip = (txt, maxW) => {
+        if (c2.measureText(txt).width <= maxW) return txt;
+        let lo = 0, hi = txt.length;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (c2.measureText(txt.slice(0, mid) + '…').width <= maxW) lo = mid; else hi = mid - 1; }
+        return txt.slice(0, lo) + '…';
+      };
+      let gy = padPx + legendH + canvas.height + Math.round(10 * dpr);
+      c2.font = fontBold;
+      c2.fillStyle = css.getPropertyValue('--fg-dim').trim();
+      c2.fillText('FIELD GUIDE', padPx, gy + guideTitleH / 2);
+      gy += guideTitleH;
+      const swW = Math.round(18 * dpr);
+      for (const g of grows) {
+        const yMid = gy + legendRowH / 2;
+        c2.strokeStyle = g.color;
+        c2.lineWidth = Math.max(2, dpr);
+        c2.setLineDash(g.slots[0] === 'B' ? [3 * dpr, 2 * dpr] : g.slots[0] === 'C' ? [dpr, 1.5 * dpr] : []);
+        c2.beginPath(); c2.moveTo(padPx, yMid); c2.lineTo(padPx + swW, yMid); c2.stroke();
+        c2.setLineDash([]);
+        const label = clip(g.col + ' (' + g.slots.join(', ') + ')', maxW * 0.45);
+        c2.font = fontBold;
+        c2.fillStyle = css.getPropertyValue('--fg').trim() || '#d7dce4';
+        c2.fillText(label, padPx + swW + swatchGap, yMid);
+        const lx = padPx + swW + swatchGap + c2.measureText(label).width + Math.round(10 * dpr);
+        c2.font = font;
+        c2.fillStyle = css.getPropertyValue('--fg-dim').trim();
+        c2.fillText(clip(g.desc, out.width - lx - padPx), lx, yMid);
+        gy += legendRowH;
+      }
+    }
 
     const fname = 'telemetry-chart-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.png';
     const blob = await new Promise((res) => out.toBlob(res, 'image/png'));

@@ -12,6 +12,14 @@ works fully offline (fine for air-gapped benchmark boxes).
 - Pick columns to plot with a per-column A/B/C checkbox and a
   type-to-filter box (HWiNFO exports can have 500+ columns)
 - Line chart with hover tooltip, drag-to-zoom, double-click reset
+- **Per-slot color families**: file A is always blue-family, B orange-family,
+  C green-family (5 shades each), so one file never borrows another file's
+  color even with several columns selected
+- **Column tooltips**: hover any column in the field selector (or legend)
+  for a plain-language description of what it measures
+- **Field guide**: a panel under the chart (also baked into PNG exports)
+  listing every selected field, which files it comes from, and what it
+  means in plain English
 - **Friendly names** per file: type a system name (e.g. "Pro Precision 7 14")
   and the legend groups each file's series under a named subsection
 - **Export Chart** saves a high-resolution PNG of the chart plus grouped
